@@ -9,7 +9,7 @@ from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
-
+from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 
 class Session(requests.Session):
     """Class that adds a Selenium Webdriver and helper methods to a  Requests Session
@@ -36,9 +36,11 @@ class Session(requests.Session):
             self._driver_initializer = self._start_phantomjs_browser
         elif browser == 'chrome':
             self._driver_initializer = self._start_chrome_browser
+        elif browser == 'remote-chrome':
+            self._driver_initializer = self._start_remote_chrome_browser
         else:
             raise ValueError(
-                'Invalid Argument: browser must be chrome or phantomjs, not: "{}"'.format(browser)
+                'Invalid Argument: browser must be chrome, phantomjs or remote-chrome, not: "{}"'.format(browser)
             )
 
     @property
@@ -94,6 +96,28 @@ class Session(requests.Session):
         return RequestiumChrome(self.webdriver_path,
                                 chrome_options=chrome_options,
                                 default_timeout=self.default_timeout)
+
+    def _start_remote_chrome_browser(self):
+        # TODO transfer of proxies and headers: Not supported by chromedriver atm.
+        # Choosing not to use plug-ins for this as I don't want to worry about the
+        # extra dependencies and plug-ins don't work in headless mode. :-(
+        chrome_options = webdriver.chrome.options.Options()
+
+        if 'binary_location' in self.webdriver_options:
+            chrome_options.binary_location = self.webdriver_options['binary_location']
+
+        if 'arguments' in self.webdriver_options:
+            if isinstance(self.webdriver_options['arguments'], list):
+                for arg in self.webdriver_options['arguments']:
+                    chrome_options.add_argument(arg)
+            else:
+                raise Exception('A list is needed to use \'arguments\' option. Found {}'.format(
+                    type(self.webdriver_options['arguments'])))
+
+        # Create driver process
+        return RequestiumRemoteChrome(self.webdriver_path, desired_capabilities=DesiredCapabilities.CHROME,
+                                      options=chrome_options,
+                                      default_timeout=self.default_timeout)
 
     def transfer_session_cookies_to_driver(self, domain=None):
         """Copies the Session's cookies into the webdriver
@@ -406,4 +430,7 @@ class RequestiumPhantomJS(DriverMixin, webdriver.PhantomJS):
 
 
 class RequestiumChrome(DriverMixin, webdriver.Chrome):
+    pass
+
+class RequestiumRemoteChrome(DriverMixin, webdriver.Remote):
     pass
